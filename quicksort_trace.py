@@ -5,6 +5,7 @@ from dataclasses import dataclass
 class EnterRange:
     lo: int
     hi: int
+    side: str = "start"
 
 
 @dataclass(frozen=True)
@@ -34,26 +35,43 @@ class BaseCase:
     index: int
 
 
-Event = EnterRange | ChoosePivot | Compare | Swap | SeatPivot | BaseCase
+@dataclass(frozen=True)
+class EmptyRange:
+    lo: int
+    hi: int
+    side: str
+
+
+@dataclass(frozen=True)
+class ReturnRange:
+    lo: int
+    hi: int
+
+
+Event = EnterRange | ChoosePivot | Compare | Swap | SeatPivot | BaseCase | EmptyRange | ReturnRange
 
 
 def trace_quicksort(values: list[int]) -> tuple[list[Event], list[int]]:
     items = list(values)
     events: list[Event] = []
-    _sort(items, 0, len(items) - 1, events)
+    if items:
+        _sort(items, 0, len(items) - 1, events)
     return events, items
 
 
-def _sort(items: list[int], lo: int, hi: int, events: list[Event]) -> None:
+def _sort(items: list[int], lo: int, hi: int, events: list[Event], side: str = "start") -> None:
     if hi < lo:
+        events.append(EmptyRange(lo, hi, side))
         return
     if lo == hi:
         events.append(BaseCase(lo))
+        events.append(ReturnRange(lo, lo))
         return
-    events.append(EnterRange(lo, hi))
+    events.append(EnterRange(lo, hi, side))
     pivot_at = _partition(items, lo, hi, events)
-    _sort(items, lo, pivot_at - 1, events)
-    _sort(items, pivot_at + 1, hi, events)
+    _sort(items, lo, pivot_at - 1, events, "left")
+    _sort(items, pivot_at + 1, hi, events, "right")
+    events.append(ReturnRange(lo, hi))
 
 
 def _partition(items: list[int], lo: int, hi: int, events: list[Event]) -> int:

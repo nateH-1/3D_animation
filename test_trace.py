@@ -2,7 +2,9 @@ from quicksort_trace import (
     BaseCase,
     ChoosePivot,
     Compare,
+    EmptyRange,
     EnterRange,
+    ReturnRange,
     SeatPivot,
     Swap,
     trace_quicksort,
@@ -66,7 +68,48 @@ def main() -> None:
     assert trace_quicksort([]) == ([], [])
     one_events, one_final = trace_quicksort([4])
     assert one_final == [4]
-    assert len(one_events) == 1 and isinstance(one_events[0], BaseCase) and one_events[0].index == 0
+    assert len(one_events) == 2
+    assert isinstance(one_events[0], BaseCase) and one_events[0].index == 0
+    assert isinstance(one_events[1], ReturnRange) and (one_events[1].lo, one_events[1].hi) == (0, 0)
+
+    ordered = [1, 2, 3, 4, 5]
+    ordered_events, ordered_final = trace_quicksort(ordered)
+    assert ordered_final == [1, 2, 3, 4, 5], "sorted input stays sorted"
+    assert not any(isinstance(event, Swap) for event in ordered_events), "sorted input does not swap"
+    assert [event.side for event in ordered_events if isinstance(event, EmptyRange)] == [
+        "right",
+        "right",
+        "right",
+        "right",
+    ], "sorted input leaves every right side empty"
+    assert [(event.lo, event.hi) for event in ordered_events if isinstance(event, ReturnRange)] == [
+        (0, 0),
+        (0, 1),
+        (0, 2),
+        (0, 3),
+        (0, 4),
+    ], "sorted calls return from the left"
+
+    ties = [2, 2, 1, 2]
+    ties_events, ties_final = trace_quicksort(ties)
+    ties_played, _, _ = replay(ties, ties_events)
+    assert ties_played == ties_final == [1, 2, 2, 2], "duplicate values sort"
+
+    assert [(event.lo, event.hi) for event in diagram_events if isinstance(event, ReturnRange)] == [
+        (0, 0),
+        (3, 3),
+        (2, 3),
+        (0, 3),
+        (6, 6),
+        (8, 8),
+        (6, 8),
+        (5, 8),
+        (0, 8),
+    ], "diagram calls return left, then right"
+    assert [(event.side, event.lo, event.hi) for event in diagram_events if isinstance(event, EmptyRange)] == [
+        ("left", 2, 1),
+        ("left", 5, 4),
+    ], "diagram empty sides"
     print("trace ok")
 
 
