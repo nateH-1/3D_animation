@@ -1,12 +1,18 @@
 from manim import (
     DOWN,
+    LEFT,
+    ORIGIN,
     RIGHT,
+    UL,
     UP,
+    UR,
     BraceBetweenPoints,
     FadeIn,
     FadeOut,
+    Line,
     MoveAlongPath,
     Rectangle,
+    RoundedRectangle,
     Scene,
     Text,
     VGroup,
@@ -30,9 +36,11 @@ CELL_FILL = "#FFFFFF"
 PIVOT_FILL = "#E5F5EA"
 BORDER = "#D5DDE3"
 NUMBER = "#243040"
+MUTED = "#5A6B78"
 PIVOT_INK = "#1F8A5B"
 ACTIVE = "#D6E4F0"
 ACTIVE_INK = "#3D5A73"
+TYPEFACE = "Helvetica"
 
 CELL_W = 0.78
 CELL_H = 0.56
@@ -54,18 +62,21 @@ class ArrayRow:
 class QuicksortSplit(Scene):
     def construct(self) -> None:
         self.camera.background_color = BACKGROUND
-        events, _final = trace_quicksort(VALUES)
+        self.note: Text | None = None
+        self._mount_theme()
+        self._intro()
+        events, self.final = trace_quicksort(VALUES)
         self.values = list(VALUES)
         self.rows: list[ArrayRow] = []
         self.active: ArrayRow | None = None
         self.lo = 0
         self.hi = len(self.values) - 1
         self.pivot_value: int | None = None
-        self.note: Text | None = None
         for event in events:
             self._play(event)
         self._say("The whole row is sorted.")
         self.wait(1.2)
+        self._outro()
 
     def _play(self, event: object) -> None:
         if isinstance(event, EnterRange):
@@ -84,6 +95,141 @@ class QuicksortSplit(Scene):
             self._empty(event)
         elif isinstance(event, ReturnRange):
             self._return(event)
+
+    def _mount_theme(self) -> None:
+        width = self.camera.frame_width
+        bar = Rectangle(
+            width=width,
+            height=0.1,
+            fill_color=PIVOT_INK,
+            fill_opacity=1,
+            stroke_width=0,
+        )
+        bar.to_edge(UP, buff=0)
+        brand = _label("QuickSort", 18, PIVOT_INK)
+        brand.to_edge(UP, buff=0.22).to_edge(LEFT, buff=0.4)
+        tag = _label("Divide and conquer", 14, MUTED)
+        tag.next_to(brand, RIGHT, buff=0.28)
+        tag.align_to(brand, DOWN)
+        rule = Line(
+            LEFT * (width / 2 - 0.35),
+            RIGHT * (width / 2 - 0.35),
+            color=BORDER,
+            stroke_width=1.5,
+        )
+        rule.next_to(bar, DOWN, buff=0.44)
+        rail = _panel(width - 0.7, 0.58)
+        rail.to_edge(DOWN, buff=0.16)
+        rail_edge = Line(
+            rail.get_corner(UL),
+            rail.get_corner(UR),
+            color=PIVOT_INK,
+            stroke_width=2.5,
+        )
+        rail.set_z_index(1)
+        rail_edge.set_z_index(2)
+        bar.set_z_index(3)
+        brand.set_z_index(3)
+        tag.set_z_index(3)
+        rule.set_z_index(3)
+        self.add(bar, brand, tag, rule, rail, rail_edge)
+        self.caption_rail = rail
+        self.chrome = [bar, brand, tag, rule, rail, rail_edge]
+
+    def _intro(self) -> None:
+        welcome = _label("Welcome, folks", 42)
+        underline = Line(LEFT * 1.35, RIGHT * 1.35, color=PIVOT_INK, stroke_width=4)
+        underline.next_to(welcome, DOWN, buff=0.16)
+        subtitle = _label(
+            "This is a 3D animation explaining\nthe QuickSort algorithm.",
+            24,
+            MUTED,
+            line_spacing=0.18,
+        )
+        subtitle.next_to(underline, DOWN, buff=0.4)
+        cover = VGroup(welcome, underline, subtitle)
+        cover.move_to(ORIGIN).shift(UP * 0.15)
+        self._say("A short look at the algorithm.")
+        self.play(FadeIn(cover), run_time=0.6)
+        self.wait(2.5)
+
+        body = _label(
+            "QuickSort is a divide-and-conquer sorting algorithm. It chooses a pivot, then splits the remaining values into a left group of items less than or equal to the pivot and a right group of items greater than the pivot. After that split, the pivot is already in its final place, and QuickSort repeats the same steps on each side until every group is sorted.",
+            22,
+            align="left",
+            width=9.2,
+        )
+        definition = _text_card(body)
+        definition.move_to(ORIGIN).shift(UP * 0.12)
+        self.play(FadeOut(cover), FadeIn(definition), run_time=0.7)
+        self._say("What is QuickSort?")
+        self.wait(15)
+
+        heading = _label("We start with this list:", 22)
+        heading_rule = Line(LEFT * 1.6, RIGHT * 1.6, color=PIVOT_INK, stroke_width=3)
+        cells = VGroup(*[_cell(value) for value in VALUES])
+        cells.arrange(RIGHT, buff=0)
+        heading_rule.next_to(heading, DOWN, buff=0.14)
+        cells.next_to(heading_rule, DOWN, buff=0.4)
+        numbers = VGroup(heading, heading_rule, cells)
+        numbers.move_to(ORIGIN).shift(UP * 0.12)
+        self.play(FadeOut(definition), FadeIn(numbers), run_time=0.7)
+        self._say("These values are the input for the sort.")
+        self.wait(2.5)
+        self.play(FadeOut(numbers), run_time=0.5)
+        self.wait(0.3)
+
+    def _outro(self) -> None:
+        self._clear_stage()
+        heading = _label("The list is sorted.", 22)
+        heading_rule = Line(LEFT * 1.35, RIGHT * 1.35, color=PIVOT_INK, stroke_width=3)
+        cells = VGroup(*[_cell(value, fill=PIVOT_FILL) for value in self.final])
+        for cell in cells:
+            cell[0].set_stroke(PIVOT_INK, width=1.5)
+        cells.arrange(RIGHT, buff=0)
+        heading_rule.next_to(heading, DOWN, buff=0.14)
+        cells.next_to(heading_rule, DOWN, buff=0.4)
+        finished = VGroup(heading, heading_rule, cells)
+        finished.move_to(ORIGIN).shift(UP * 0.12)
+        self.play(FadeIn(finished), run_time=0.6)
+        self._say("Every value is in its final place.")
+        self.wait(2.6)
+
+        body = _label(
+            "Choose the last value as the pivot.\n"
+            "Move smaller or equal values left, then seat the pivot.\n"
+            "Repeat on each side until every value is in place.",
+            22,
+            align="left",
+        )
+        recap = _text_card(body)
+        recap.move_to(ORIGIN).shift(UP * 0.12)
+        self.play(FadeOut(finished), FadeIn(recap), run_time=0.7)
+        self._say("The idea, in three steps.")
+        self.wait(4.5)
+
+        thanks = _label("Thanks for watching.", 42)
+        underline = Line(LEFT * 1.7, RIGHT * 1.7, color=PIVOT_INK, stroke_width=4)
+        underline.next_to(thanks, DOWN, buff=0.16)
+        close = _label(
+            "One pivot at a time,\nuntil the row is in order.",
+            24,
+            MUTED,
+            line_spacing=0.18,
+        )
+        close.next_to(underline, DOWN, buff=0.4)
+        ending = VGroup(thanks, underline, close)
+        ending.move_to(ORIGIN).shift(UP * 0.15)
+        self.play(FadeOut(recap), FadeIn(ending), run_time=0.7)
+        self._say("QuickSort")
+        self.wait(2.6)
+
+    def _clear_stage(self) -> None:
+        keep = set(self.chrome)
+        extras = [mob for mob in list(self.mobjects) if mob not in keep]
+        if extras:
+            self.play(*[FadeOut(mob) for mob in extras], run_time=0.55)
+        self.note = None
 
     def _enter(self, event: EnterRange) -> None:
         self.lo = event.lo
@@ -236,13 +382,111 @@ class QuicksortSplit(Scene):
         self.play(FadeOut(box), run_time=0.2)
 
     def _say(self, message: str) -> None:
-        note = Text(message, font_size=20, color=NUMBER)
-        note.to_edge(DOWN, buff=0.22)
+        note = _label(message, 20)
+        note.move_to(self.caption_rail.get_center())
+        note.set_z_index(2)
         if self.note is None:
             self.play(FadeIn(note), run_time=0.15)
         else:
             self.play(FadeOut(self.note), FadeIn(note), run_time=0.15)
         self.note = note
+
+
+def _wrap_text(message: str, font_size: int, max_width: float) -> str:
+    words = message.split()
+    lines: list[str] = []
+    current = ""
+    for word in words:
+        trial = word if not current else f"{current} {word}"
+        trial_width = Text(
+            trial,
+            font=TYPEFACE,
+            font_size=font_size,
+            disable_ligatures=True,
+        ).width
+        if current and trial_width > max_width:
+            lines.append(current)
+            current = word
+        else:
+            current = trial
+    if current:
+        lines.append(current)
+    return "\n".join(lines)
+
+
+def _label(
+    message: str,
+    font_size: int,
+    color: str = NUMBER,
+    line_spacing: float = -1,
+    align: str = "center",
+    width: float | None = None,
+) -> VMobject:
+    if width is not None:
+        message = _wrap_text(message, font_size, width)
+    if "\n" in message:
+        rows = [
+            Text(
+                line,
+                font=TYPEFACE,
+                font_size=font_size,
+                color=color,
+                disable_ligatures=True,
+            )
+            for line in message.split("\n")
+            if line.strip()
+        ]
+        block = VGroup(*rows)
+        gap = font_size * 0.012 if line_spacing < 0 else font_size * 0.008 * (1 + line_spacing)
+        block.arrange(DOWN, buff=gap, aligned_edge=LEFT if align == "left" else ORIGIN)
+        return block
+    return Text(
+        message,
+        font=TYPEFACE,
+        font_size=font_size,
+        color=color,
+        line_spacing=line_spacing,
+        disable_ligatures=True,
+    )
+
+
+def _text_card(body: VMobject) -> VGroup:
+    pad_x = 0.5
+    pad_y = 0.42
+    accent_w = 0.09
+    gap = 0.32
+    card = RoundedRectangle(
+        corner_radius=0.16,
+        width=body.width + pad_x + accent_w + gap + 0.42,
+        height=body.height + pad_y * 2,
+        fill_color=CELL_FILL,
+        fill_opacity=1,
+        stroke_color=BORDER,
+        stroke_width=1.25,
+    )
+    accent = RoundedRectangle(
+        corner_radius=0.045,
+        width=accent_w,
+        height=max(0.4, card.height - 0.42),
+        fill_color=PIVOT_INK,
+        fill_opacity=1,
+        stroke_width=0,
+    )
+    accent.move_to(card.get_center()).align_to(card, LEFT).shift(RIGHT * 0.2)
+    body.next_to(accent, RIGHT, buff=gap)
+    body.set_y(card.get_y())
+    return VGroup(card, accent, body)
+
+
+def _panel(width: float, height: float) -> Rectangle:
+    return Rectangle(
+        width=width,
+        height=height,
+        fill_color=CELL_FILL,
+        fill_opacity=1,
+        stroke_color=BORDER,
+        stroke_width=1.5,
+    )
 
 
 def _returned_line(side: str) -> str:
@@ -286,13 +530,13 @@ def _cell(value: int, fill: str = CELL_FILL) -> VGroup:
         stroke_color=BORDER,
         stroke_width=1.5,
     )
-    number = Text(str(value), font_size=24, color=NUMBER)
+    number = _label(str(value), 24)
     number.move_to(box)
     return VGroup(box, number)
 
 
 def _pivot_label(cell: VGroup) -> Text:
-    label = Text("pivot", font_size=16, color=PIVOT_INK)
+    label = _label("pivot", 16, PIVOT_INK)
     label.next_to(cell, UP, buff=0.05)
     return label
 
