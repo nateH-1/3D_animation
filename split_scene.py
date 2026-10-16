@@ -46,8 +46,10 @@ CELL_W = 0.78
 CELL_H = 0.56
 ROOT_Y = 2.7
 ROW_DY = 1.62
+MIN_ROW_DY = 0.9
+ROW_FLOOR = -1.5
 # This start order seats into the diagram: 4 3 1 2 | 5 | 9 7 10 6.
-VALUES = [4, 3, 1, 2, 6, 9, 7, 10, 5]
+VALUES = [1, 2, 3, 4, 5, 6, 7]
 
 
 class ArrayRow:
@@ -63,6 +65,8 @@ class QuicksortSplit(Scene):
     def construct(self) -> None:
         self.camera.background_color = BACKGROUND
         self.note: Text | None = None
+        self.note_ready_at = 0.0
+        self.said: set[str] = set()
         self._mount_theme()
         self._intro()
         events, self.final = trace_quicksort(VALUES)
@@ -72,6 +76,11 @@ class QuicksortSplit(Scene):
         self.lo = 0
         self.hi = len(self.values) - 1
         self.pivot_value: int | None = None
+        max_depth = max(1, len(self.values) - 1)
+        usable = ROOT_Y - ROW_FLOOR
+        self.row_dy = min(ROW_DY, max(MIN_ROW_DY, usable / max_depth))
+        self.tree = VGroup()
+        self.add(self.tree)
         for event in events:
             self._play(event)
         self._say("The whole row is sorted.")
@@ -225,11 +234,13 @@ class QuicksortSplit(Scene):
         self.wait(2.6)
 
     def _clear_stage(self) -> None:
+        self._hold_note()
         keep = set(self.chrome)
         extras = [mob for mob in list(self.mobjects) if mob not in keep]
         if extras:
             self.play(*[FadeOut(mob) for mob in extras], run_time=0.55)
         self.note = None
+        self.note_ready_at = 0.0
 
     def _enter(self, event: EnterRange) -> None:
         self.lo = event.lo
@@ -244,21 +255,29 @@ class QuicksortSplit(Scene):
             ordered.append(cell)
         group = VGroup(*ordered)
         group.arrange(RIGHT, buff=0)
-        group.set_y(ROOT_Y - depth * ROW_DY)
         if parent is None:
             group.set_x(0)
+            group.set_y(ROOT_Y)
         else:
             anchors = [parent.cells[index] for index in range(event.lo, event.hi + 1)]
             group.set_x(_center_x(anchors))
+            group.set_y(anchors[0].get_y() - self.row_dy)
         row = ArrayRow(event.lo, event.hi, depth, cells)
         self.rows.append(row)
         self.active = row
+        self._ensure_visible(group)
         highlight = None
         if parent is not None:
             anchors = [parent.cells[index] for index in range(event.lo, event.hi + 1)]
             highlight = _range_box(anchors)
             self.play(FadeIn(highlight), run_time=0.2)
-        self._say(_enter_line(event.side, depth))
+        if event.side == "start":
+            self._say("Start with the whole row.")
+        elif event.side == "left":
+            self._say("Now sort the left side.")
+        else:
+            self._say("Now sort the right side.")
+        self.tree.add(group)
         self.play(FadeIn(group), run_time=0.3)
         if highlight is not None:
             self.play(FadeOut(highlight), run_time=0.15)
@@ -267,17 +286,22 @@ class QuicksortSplit(Scene):
     def _choose(self, event: ChoosePivot) -> None:
         assert self.active is not None
         self.pivot_value = self.values[event.index]
-        self._say(f"The pivot is {self.pivot_value}, the last value in this group.")
+        p = self.pivot_value
+        self._say_first(
+            "choose",
+            f"Pick the last value, {p}, as the pivot.",
+            f"The pivot is {p}.",
+        )
         box = self.active.cells[event.index][0]
         self.play(box.animate.set_stroke(PIVOT_INK, width=2.5), run_time=0.25)
 
     def _compare(self, event: Compare) -> None:
         assert self.active is not None
-        value = self.values[event.index]
-        if event.goes_left:
-            self._say(f"{value} ≤ pivot, so it stays on the left.")
-        else:
-            self._say(f"{value} > pivot, so it stays on the right.")
+        p = self.pivot_value
+        self._say_once(
+            "compare",
+            f"Values up to {p} go left. Bigger values stay right.",
+        )
         box = self.active.cells[event.index][0]
         color = box.get_stroke_color()
         width = box.get_stroke_width()
@@ -296,7 +320,6 @@ class QuicksortSplit(Scene):
         self.active.cells[event.i] = second
         self.active.cells[event.j] = first
         self.values[event.i], self.values[event.j] = self.values[event.j], self.values[event.i]
-        self._say("These two values swap.")
 
     def _seat(self, event: SeatPivot) -> None:
         assert self.active is not None
@@ -304,16 +327,15 @@ class QuicksortSplit(Scene):
         cell = self.active.cells[event.index]
         label = _pivot_label(cell)
         braces = _side_braces(self.active, self.lo, event.index, self.hi)
+        p = self.pivot_value
+        self._say_first("seat", f"{p} is now in its final place.", f"{p} is in place.")
+        self.tree.add(label, *braces)
         self.play(
             cell[0].animate.set_fill(PIVOT_FILL).set_stroke(PIVOT_INK, width=1.5),
             FadeIn(label),
             *[FadeIn(brace) for brace in braces],
             run_time=0.4,
         )
-        if event.index == self.lo:
-            self._say("The pivot is seated. The left side is empty.")
-        else:
-            self._say("The pivot is seated. The left group is next.")
         self.wait(0.15)
 
     def _base(self, event: BaseCase) -> None:
@@ -321,18 +343,28 @@ class QuicksortSplit(Scene):
         depth = 0 if parent is None else parent.depth + 1
         cell = _cell(self.values[event.index], fill=PIVOT_FILL)
         cell[0].set_stroke(PIVOT_INK, width=1.5)
-        cell.set_y(ROOT_Y - depth * ROW_DY)
         if parent is None:
             cell.set_x(0)
+            cell.set_y(ROOT_Y)
         else:
-            cell.set_x(parent.cells[event.index].get_x())
+            anchor = parent.cells[event.index]
+            cell.set_x(anchor.get_x())
+            cell.set_y(anchor.get_y() - self.row_dy)
         label = _pivot_label(cell)
         self.rows.append(ArrayRow(event.index, event.index, depth, {event.index: cell}))
+        value = self.values[event.index]
+        self._say_first("base", "A single value is already sorted.", f"{value} is already sorted.")
+        self._ensure_visible(cell)
+        label.next_to(cell, UP, buff=0.05)
+        self.tree.add(cell, label)
         self.play(FadeIn(cell), FadeIn(label), run_time=0.3)
-        self._say("Base case.")
 
     def _empty(self, event: EmptyRange) -> None:
-        self._say(_returned_line(event.side))
+        self._say_first(
+            "empty",
+            f"The {event.side} side is empty, so that call ends right away.",
+            f"The {event.side} side is empty.",
+        )
         self.wait(0.45)
 
     def _return(self, event: ReturnRange) -> None:
@@ -344,7 +376,6 @@ class QuicksortSplit(Scene):
         if parent is None:
             self._flash(child_cells, hold=0.45)
             return
-        side = "left" if parent.pivot is not None and event.hi < parent.pivot else "right"
         highlight = _range_box(child_cells)
         self.play(FadeIn(highlight), run_time=0.25)
         self.wait(0.35)
@@ -357,12 +388,17 @@ class QuicksortSplit(Scene):
             run_time=0.25,
         )
         self.wait(0.15)
+        if parent.depth == 0 and parent.pivot is not None:
+            side = "left" if event.hi < parent.pivot else "right"
+            self._say(f"The {side} half is sorted.")
+        else:
+            self._say_once("return", "That side is sorted, so it moves back up.")
         anims = []
         arrivals: list[tuple[int, VGroup]] = []
         for offset, index in enumerate(range(event.lo, event.hi + 1)):
             copy = row.cells[index].copy()
             copy.set_z_index(8)
-            self.add(copy)
+            self.tree.add(copy)
             anims.append(copy.animate.move_to(targets[offset]))
             arrivals.append((index, copy))
         self.play(*anims, run_time=1.0)
@@ -371,7 +407,6 @@ class QuicksortSplit(Scene):
         parent_cells = [parent.cells[index] for index in range(event.lo, event.hi + 1)]
         done = _range_box(parent_cells)
         self.play(FadeOut(highlight), FadeIn(done), run_time=0.25)
-        self._say(_returned_line(side))
         self.wait(0.5)
         self.play(FadeOut(done), run_time=0.2)
 
@@ -381,7 +416,36 @@ class QuicksortSplit(Scene):
         self.wait(hold)
         self.play(FadeOut(box), run_time=0.2)
 
+    def _ensure_visible(self, mob: VMobject) -> None:
+        bottom = mob.get_bottom()[1]
+        if bottom >= ROW_FLOOR:
+            return
+        lift = ROW_FLOOR - bottom
+        movers = [mob]
+        if len(self.tree) > 0:
+            movers.insert(0, self.tree)
+        self.play(*[item.animate.shift(UP * lift) for item in movers], run_time=0.35)
+
+    def _hold_note(self) -> None:
+        leftover = self.note_ready_at - self.renderer.time
+        if self.note is not None and leftover > 0:
+            self.wait(leftover)
+
+    def _say_once(self, key: str, message: str) -> None:
+        if key in self.said:
+            return
+        self.said.add(key)
+        self._say(message)
+
+    def _say_first(self, key: str, first: str, later: str) -> None:
+        if key in self.said:
+            self._say(later)
+            return
+        self.said.add(key)
+        self._say(first)
+
     def _say(self, message: str) -> None:
+        self._hold_note()
         note = _label(message, 20)
         note.move_to(self.caption_rail.get_center())
         note.set_z_index(2)
@@ -390,6 +454,7 @@ class QuicksortSplit(Scene):
         else:
             self.play(FadeOut(self.note), FadeIn(note), run_time=0.15)
         self.note = note
+        self.note_ready_at = self.renderer.time + max(1.6, 0.9 + 0.3 * len(message.split()))
 
 
 def _wrap_text(message: str, font_size: int, max_width: float) -> str:
@@ -487,20 +552,6 @@ def _panel(width: float, height: float) -> Rectangle:
         stroke_color=BORDER,
         stroke_width=1.5,
     )
-
-
-def _returned_line(side: str) -> str:
-    if side == "left":
-        return "Left call returned."
-    return "Right call returned."
-
-
-def _enter_line(side: str, depth: int) -> str:
-    if side == "start":
-        return "Depth 0. Start with the whole row."
-    if side == "left":
-        return f"Depth {depth}. The left group is the next input."
-    return f"Depth {depth}. The right group is the next input."
 
 
 def _range_box(cells: list[VGroup]) -> Rectangle:
